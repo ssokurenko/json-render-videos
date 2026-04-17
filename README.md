@@ -7,7 +7,9 @@ An AI-powered video generation application that creates stunning video timelines
 - **AI-Powered Video Generation**: Describe your video in natural language, and let Claude AI generate a complete JSON timeline specification
 - **Real-Time Preview**: Watch your video render in real-time as the timeline is being generated
 - **JSON Visualization**: See the generated timeline structure with syntax highlighting
-- **Export**: Download generated timeline specifications as JSON for reuse or integration
+- **Export Timeline**: Download generated timeline specifications as JSON for reuse or integration
+- **Render to MP4**: Server-side video rendering to MP4 files (h264 codec)
+- **Component Architecture**: Clean, modular component structure for easy customization
 - **Rate Limiting**: Built-in rate limiting to prevent abuse (optional)
 - **Dark Mode Ready**: Beautiful dark-themed interface built with Tailwind CSS
 
@@ -101,28 +103,42 @@ Open [http://localhost:3000](http://localhost:3000) in your browser to start gen
 2. **Generate**: Click the send button or press Enter
 
 3. **Watch the Magic**: 
-   - Left panel shows the generated JSON timeline specification
-   - Right panel displays a live video preview
+   - Left panel shows the generated JSON timeline specification with syntax highlighting
+   - Right panel displays a live video preview using Remotion
 
-4. **Export**: Click "Export" to download the timeline JSON for use elsewhere
+4. **Export or Render**:
+   - Click **"Export"** to download the timeline JSON for reuse or integration
+   - Click **"Render MP4"** to render the video to an MP4 file (this may take 30-60 seconds)
+
+5. **Download**: The MP4 will automatically download to your computer when rendering completes
 
 ## Project Structure
 
 ```
 ├── app/
-│   ├── page.tsx                 # Main home page with video generator UI
+│   ├── page.tsx                 # Main orchestrator component
+│   ├── components/
+│   │   ├── CodeBlock.tsx        # JSON syntax-highlighted viewer (Shiki)
+│   │   ├── CopyButton.tsx       # Clipboard copy button
+│   │   ├── JsonPanel.tsx        # Left panel with JSON display
+│   │   └── VideoPanel.tsx       # Right panel with video preview & render button
 │   ├── api/
-│   │   └── generate/
-│   │       └── route.ts         # API endpoint for video generation
+│   │   ├── generate/
+│   │   │   └── route.ts         # AI prompt → JSON timeline (streaming)
+│   │   └── render/
+│   │       └── route.ts         # JSON timeline → MP4 video (server-side rendering)
 │   ├── layout.tsx               # Root layout
 │   ├── globals.css              # Global styles
 │   └── page.module.css          # Page-specific styles
+├── remotion/
+│   ├── Root.tsx                 # Remotion composition definition
+│   └── index.ts                 # Remotion root registration
 ├── lib/
 │   ├── catalog.ts               # Video specification catalog & system prompts
 │   └── rate-limit.ts            # Rate limiting logic
 ├── package.json                 # Dependencies and scripts
 ├── tsconfig.json                # TypeScript configuration
-├── next.config.js               # Next.js configuration
+├── next.config.js               # Next.js configuration (with serverExternalPackages)
 ├── tailwind.config.ts           # Tailwind CSS configuration
 ├── postcss.config.mjs           # PostCSS configuration
 └── .env-example                 # Environment variables template
@@ -132,7 +148,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser to start gen
 
 ### POST `/api/generate`
 
-Generates a video timeline specification from a text prompt.
+Generates a video timeline specification from a text prompt using Claude AI.
 
 **Request**:
 ```json
@@ -146,6 +162,36 @@ Generates a video timeline specification from a text prompt.
 **Rate Limits**:
 - Per minute: 10 requests (configurable)
 - Per day: 100 requests (configurable)
+
+---
+
+### POST `/api/render`
+
+Renders a video timeline specification to an MP4 file (server-side rendering).
+
+**Request**:
+```json
+{
+  "spec": {
+    "composition": {
+      "id": "timeline",
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "durationInFrames": 300
+    },
+    "tracks": [...],
+    "clips": [...]
+  }
+}
+```
+
+**Response**: Binary MP4 video file (h264 codec, 1080p, 80% JPEG quality)
+
+**Notes**:
+- Rendering time depends on video length and complexity (typically 30-120 seconds)
+- Maximum timeout: 5 minutes (configurable via `maxDuration`)
+- Automatically triggers download with filename `video.mp4`
 
 ## Deployment
 
@@ -162,6 +208,52 @@ Generates a video timeline specification from a text prompt.
 
 When deployed on Vercel, the AI Gateway is automatically authenticated.
 
+## Architecture
+
+### Component Organization
+
+The application follows a modular component-based architecture:
+
+- **[page.tsx](app/page.tsx)** — Main orchestrator component (100 lines)
+  - Manages state: `prompt`, `isGenerating`, `isRendering`, `spec`, `error`
+  - Handlers: `generate()`, `handleSubmit()`, `handleExport()`, `handleRender()`
+  - Composes UI from child components
+
+- **[JsonPanel.tsx](app/components/JsonPanel.tsx)** — Left panel display
+  - Shows JSON timeline with syntax highlighting
+  - Copy button for easy JSON export
+  - Real-time update indicators
+
+- **[VideoPanel.tsx](app/components/VideoPanel.tsx)** — Right panel display
+  - Live video preview using `@remotion/player`
+  - Export button for JSON download
+  - Render button for MP4 generation with loading state
+
+- **[CodeBlock.tsx](app/components/CodeBlock.tsx)** — Syntax highlighting
+  - Shiki integration with custom dark theme
+  - Singleton highlighter pattern for performance
+  - Fallback to plain text while loading
+
+- **[CopyButton.tsx](app/components/CopyButton.tsx)** — Reusable utility
+  - Clipboard API integration
+  - Visual feedback (checkmark on success)
+
+### Rendering Pipeline
+
+1. **AI Generation** (`/api/generate`)
+   - Streams text chunks from Claude via Vercel AI Gateway
+   - Client-side streaming compilation using `createSpecStreamCompiler`
+   - Real-time JSON spec updates
+
+2. **Browser Preview**
+   - Remotion `<Player>` component with `Renderer` from `@json-render/remotion`
+   - Instant preview of AI-generated specs
+
+3. **Server-Side Rendering** (`/api/render`)
+   - Bundles Remotion composition using `@remotion/bundler`
+   - Renders frames using `@remotion/renderer` with `renderMedia()`
+   - Streams binary MP4 response with auto-download
+
 ## Troubleshooting
 
 ### Issue: "Generation failed" error
@@ -173,9 +265,20 @@ When deployed on Vercel, the AI Gateway is automatically authenticated.
 - **Check**: Verify your rate limit settings in `.env.local`
 - **Note**: Rate limiting only works if Redis credentials are configured
 
-### Issue: Video not rendering
-- **Check**: Ensure the generated JSON timeline is complete (has composition, tracks, and clips)
+### Issue: Video not previewing in browser
+- **Check**: Ensure the generated JSON timeline is complete (has `composition`, `tracks`, and `clips`)
 - **Check**: Try a simpler prompt first
+- **Check**: Open browser DevTools console for specific error messages
+
+### Issue: "Render failed" error
+- **Check**: Ensure the preview is working first (browser rendering indicates valid spec)
+- **Check**: Check available disk space in `/tmp` (rendering creates temporary files)
+- **Check**: Try rendering a simpler timeline first
+
+### Issue: Render takes too long or times out
+- **Note**: Local rendering typically takes 30-120 seconds depending on video length and complexity
+- **For production**: Deploy to Vercel or increase `maxDuration` in `app/api/render/route.ts`
+- **Check**: Simpler videos (shorter duration, fewer effects) render faster
 
 ## Contributing
 

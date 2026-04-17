@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ["@json-render/core", "@json-render/remotion"],
+  serverExternalPackages: ["@remotion/bundler", "@remotion/renderer"],
   turbopack: {
     resolveAlias: {
       // Deduplicate remotion — pnpm creates separate copies when peer

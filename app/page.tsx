@@ -1,14 +1,12 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import { createSpecStreamCompiler } from "@json-render/core";
-import { Player, PlayerRef } from "@remotion/player";
-import { Renderer, type TimelineSpec } from "@json-render/remotion";
-import { createHighlighter, type Highlighter } from "shiki";
+import { PlayerRef } from "@remotion/player";
+import { type TimelineSpec } from "@json-render/remotion";
+import { JsonPanel } from "./components/JsonPanel";
+import { VideoPanel } from "./components/VideoPanel";
 
-/**
- * Check if spec is complete enough to render
- */
 function isSpecComplete(spec: TimelineSpec): spec is Required<TimelineSpec> {
   return !!(
     spec.composition &&
@@ -18,144 +16,10 @@ function isSpecComplete(spec: TimelineSpec): spec is Required<TimelineSpec> {
   );
 }
 
-/**
- * Shiki theme (Vercel-inspired dark theme)
- */
-const darkTheme = {
-  name: "custom-dark",
-  type: "dark" as const,
-  colors: {
-    "editor.background": "transparent",
-    "editor.foreground": "#EDEDED",
-  },
-  settings: [
-    {
-      scope: ["string", "string.quoted"],
-      settings: { foreground: "#50E3C2" },
-    },
-    {
-      scope: [
-        "constant.numeric",
-        "constant.language.boolean",
-        "constant.language.null",
-      ],
-      settings: { foreground: "#50E3C2" },
-    },
-    {
-      scope: ["punctuation", "meta.brace", "meta.bracket"],
-      settings: { foreground: "#888888" },
-    },
-    {
-      scope: ["support.type.property-name", "entity.name.tag.json"],
-      settings: { foreground: "#EDEDED" },
-    },
-  ],
-};
-
-// Preload highlighter
-let highlighterPromise: Promise<Highlighter> | null = null;
-
-function getHighlighter() {
-  if (!highlighterPromise) {
-    highlighterPromise = createHighlighter({
-      themes: [darkTheme],
-      langs: ["json"],
-    });
-  }
-  return highlighterPromise;
-}
-
-// Start loading immediately
-if (typeof window !== "undefined") {
-  getHighlighter();
-}
-
-/**
- * Code block with syntax highlighting
- */
-function CodeBlock({ code }: { code: string }) {
-  const [html, setHtml] = useState<string>("");
-
-  useEffect(() => {
-    getHighlighter().then((highlighter) => {
-      setHtml(
-        highlighter.codeToHtml(code, {
-          lang: "json",
-          theme: "custom-dark",
-        }),
-      );
-    });
-  }, [code]);
-
-  if (!html) {
-    return (
-      <pre className="p-4 text-left">
-        <code className="text-muted-foreground">{code}</code>
-      </pre>
-    );
-  }
-
-  return (
-    <div
-      className="p-4 text-[13px] leading-relaxed [&_pre]:bg-transparent! [&_pre]:p-0! [&_pre]:m-0! [&_code]:bg-transparent!"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
-}
-
-/**
- * Copy button component
- */
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <button
-      onClick={handleCopy}
-      className="p-1.5 rounded hover:bg-white/10 transition-colors text-muted-foreground hover:text-foreground"
-      aria-label="Copy JSON"
-    >
-      {copied ? (
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-      ) : (
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-        </svg>
-      )}
-    </button>
-  );
-}
-
 export default function Home() {
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isRendering, setIsRendering] = useState(false);
   const [spec, setSpec] = useState<TimelineSpec | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -197,13 +61,10 @@ export default function Home() {
         }
       }
 
-      // Get final result (processes any remaining buffer)
       const finalSpec = compiler.getResult();
       setSpec(finalSpec);
 
-      // Final validation and auto-play
       if (isSpecComplete(finalSpec)) {
-        // Auto-play after a short delay to ensure Player is mounted
         setTimeout(() => {
           playerRef.current?.play();
         }, 100);
@@ -240,18 +101,43 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }, [spec]);
 
+  const handleRender = useCallback(async () => {
+    if (!spec) return;
+
+    setIsRendering(true);
+    try {
+      const response = await fetch("/api/render", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ spec }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Render failed");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "video.mp4";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Render failed");
+    } finally {
+      setIsRendering(false);
+    }
+  }, [spec]);
+
   return (
     <div className="min-h-screen">
-      {/* Hero */}
       <section className="max-w-5xl mx-auto px-6 pt-24 pb-16 text-center">
-        
         <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tighter mb-6">
           JSON Render Videos
         </h1>
 
-        {/* Demo */}
         <div className="max-w-4xl mx-auto">
-          {/* Prompt Input */}
           <form onSubmit={handleSubmit} className="mb-4">
             <div className="border border-border rounded p-3 bg-background font-mono text-sm flex items-center gap-2">
               <span className="text-muted-foreground">&gt;</span>
@@ -308,110 +194,15 @@ export default function Home() {
           )}
 
           <div className="grid lg:grid-cols-2 gap-4">
-            {/* JSON Panel */}
-            <div className="text-left">
-              <div className="flex items-center gap-4 mb-2 h-6">
-                <span className="text-xs font-mono text-muted-foreground">
-                  json
-                </span>
-                {isGenerating && (
-                  <span className="text-xs text-muted-foreground animate-pulse">
-                    generating...
-                  </span>
-                )}
-              </div>
-              <div className="border border-border rounded bg-background font-mono text-xs h-[28rem] overflow-auto relative group">
-                {spec && (
-                  <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <CopyButton text={JSON.stringify(spec, null, 2)} />
-                  </div>
-                )}
-                {spec ? (
-                  <CodeBlock code={JSON.stringify(spec, null, 2)} />
-                ) : isGenerating ? (
-                  <div className="p-4 text-muted-foreground/50 h-full flex items-center justify-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="flex gap-1">
-                        <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" />
-                        <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce [animation-delay:0.1s]" />
-                        <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce [animation-delay:0.2s]" />
-                      </div>
-                      <span>Generating timeline...</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-4 text-muted-foreground/50 h-full flex items-center justify-center">
-                    Enter a prompt to generate a video timeline
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Video Preview Panel */}
-            <div>
-              <div className="flex items-center justify-between mb-2 h-6">
-                <span className="text-xs font-mono text-muted-foreground">
-                  preview
-                </span>
-                <div className="flex items-center gap-2">
-                  {spec && isSpecComplete(spec) && (
-                    <button
-                      onClick={handleExport}
-                      className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-colors"
-                      title="Export timeline JSON"
-                    >
-                      Export
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div
-                className="border border-border rounded bg-black h-[28rem] relative overflow-hidden"
-                data-player-container
-              >
-                {spec && isSpecComplete(spec) ? (
-                  <Player
-                    ref={playerRef}
-                    component={Renderer}
-                    inputProps={{ spec }}
-                    durationInFrames={spec.composition.durationInFrames}
-                    fps={spec.composition.fps}
-                    compositionWidth={spec.composition.width}
-                    compositionHeight={spec.composition.height}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                    }}
-                    controls
-                    loop
-                  />
-                ) : (
-                  <div className="h-full flex items-center justify-center text-white/30 text-sm">
-                    {isGenerating ? (
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="flex gap-1">
-                          <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce" />
-                          <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce [animation-delay:0.1s]" />
-                          <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce [animation-delay:0.2s]" />
-                        </div>
-                        <span>Generating timeline...</span>
-                      </div>
-                    ) : spec ? (
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="flex gap-1">
-                          <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce" />
-                          <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce [animation-delay:0.1s]" />
-                          <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce [animation-delay:0.2s]" />
-                        </div>
-                        <span>Building timeline...</span>
-                      </div>
-                    ) : (
-                      "Enter a prompt to generate a video"
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
+            <JsonPanel spec={spec} isGenerating={isGenerating} />
+            <VideoPanel
+              spec={spec}
+              isGenerating={isGenerating}
+              isRendering={isRendering}
+              playerRef={playerRef}
+              onExport={handleExport}
+              onRender={handleRender}
+            />
           </div>
         </div>
       </section>
