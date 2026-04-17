@@ -1,0 +1,42 @@
+{
+  "name": "json-render-videos",
+  "version": "0.1.11",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/gateway": "^3.0.13",
+    "@json-render/core": "^0.17.0",
+    "@json-render/remotion": "0.17.0",
+    "@remotion/bundler": "4.0.418",
+    "@remotion/player": "4.0.418",
+    "@remotion/renderer": "4.0.418",
+    "ai": "^6.0.70",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "next": "16.1.1",
+    "next-themes": "^0.4.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.418",
+    "shiki": "^3.21.0",
+    "tailwind-merge": "^3.4.0",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.37.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.18",
+    "@types/node": "^22.10.0",
+    "@types/react": "19.2.3",
+    "@types/react-dom": "19.2.3",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.7.2"
+  }
+}
