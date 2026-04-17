@@ -1,11 +1,27 @@
 import { Composition } from "remotion";
 import { Renderer, type TimelineSpec } from "@json-render/remotion";
+import { loadFont } from "@remotion/fonts";
+import { staticFile } from "remotion";
+
+loadFont({
+  family: "Geist Sans",
+  url: staticFile("fonts/GeistVF.woff"),
+});
+
+loadFont({
+  family: "Geist Mono",
+  url: staticFile("fonts/GeistMonoVF.woff"),
+});
 
 interface TimelineProps {
   spec: TimelineSpec;
 }
 
-const Timeline = ({ spec }: TimelineProps) => <Renderer spec={spec} />;
+const Timeline = ({ spec }: TimelineProps) => (
+  <div style={{ fontFamily: "Geist Sans" }}>
+    <Renderer spec={spec} />
+  </div>
+);
 
 export const RemotionRoot = () => (
   <Composition

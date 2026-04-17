@@ -14,8 +14,11 @@
     "@json-render/core": "^0.17.0",
     "@json-render/remotion": "0.17.0",
     "@remotion/bundler": "4.0.418",
+    "@remotion/fonts": "^4.0.448",
     "@remotion/player": "4.0.418",
     "@remotion/renderer": "4.0.418",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.37.0",
     "ai": "^6.0.70",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -26,8 +29,6 @@
     "remotion": "4.0.418",
     "shiki": "^3.21.0",
     "tailwind-merge": "^3.4.0",
-    "@upstash/ratelimit": "^2.0.8",
-    "@upstash/redis": "^1.37.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
